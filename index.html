@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spun Pole Weight — Production Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --graphite: #070b14;
+    --panel: #101827;
+    --panel-raised: #16213a;
+    --hairline: #2a3550;
+    --cast: #e9edf5;
+    --cast-dim: #8b96ad;
+    --amber: #f2b705;
+    --amber-dim: #7a6205;
+    --rust: #d94f30;
+    --green: #4c9a6a;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --glass-bg: rgba(30, 42, 68, 0.45);
+    --glass-border: rgba(255,255,255,0.10);
+    --card-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 32px -10px rgba(0,0,0,0.6);
+    --card-shadow-hover: 0 2px 4px rgba(0,0,0,0.35), 0 16px 40px -12px rgba(0,0,0,0.7);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--graphite);
+    color:var(--cast);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    background-image:
+      radial-gradient(ellipse 900px 500px at 12% -5%, rgba(59,91,163,0.35), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 20%, rgba(242,183,5,0.10), transparent 55%),
+      radial-gradient(ellipse 800px 600px at 50% 100%, rgba(76,154,106,0.08), transparent 55%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    background-attachment:fixed;
+  }
+  ::selection{background:var(--amber); color:#1b1d1e;}
+
+  .wrap{max-width:1180px; margin:0 auto; padding:28px 24px 80px;}
+
+  /* ---- Header / ticket strip ---- */
+  header{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    border-bottom:2px solid var(--amber);
+    padding-bottom:18px; margin-bottom:22px; flex-wrap:wrap; gap:16px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.12em;
+    color:var(--amber); text-transform:uppercase; margin-bottom:6px;
+  }
+  h1{
+    font-family:'Oswald', sans-serif; font-weight:700; font-size:34px;
+    letter-spacing:.01em; margin:0; text-transform:uppercase;
+  }
+  .plant-meta{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--cast-dim);
+    text-align:right; line-height:1.6;
+  }
+  .plant-meta span{color:var(--cast);}
+
+  /* ---- Load panel ---- */
+  .load-panel{
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
+    border-radius:var(--radius); box-shadow:var(--card-shadow);
+    padding:22px 24px; margin-bottom:28px;
+    display:flex; gap:20px; flex-wrap:wrap; align-items:flex-end;
+  }
+  .field{display:flex; flex-direction:column; gap:6px;}
+  .field label{
+    font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--cast-dim);
+  }
+  .field input[type=number]{
+    background:var(--graphite); border:1px solid var(--hairline); color:var(--cast);
+    font-family:'IBM Plex Mono', monospace; font-size:14px; padding:7px 9px; width:96px;
+    border-radius:var(--radius-sm);
+  }
+  .file-drop{
+    flex:1; min-width:240px;
+    border:1px dashed var(--hairline); border-radius:var(--radius-sm);
+    padding:12px 16px; display:flex; align-items:center; gap:12px;
+    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--cast-dim);
+    cursor:pointer; transition:border-color .15s;
+  }
+  .file-drop:hover, .file-drop.drag{border-color:var(--amber); color:var(--cast);}
+  .file-drop input{display:none;}
+  .btn{
+    background:var(--amber); color:#1b1d1e; border:none; border-radius:var(--radius-sm);
+    font-family:'Oswald', sans-serif; font-weight:600; letter-spacing:.03em;
+    text-transform:uppercase; font-size:12.5px; padding:9px 18px; cursor:pointer;
+  }
+  .btn.secondary{
+    background:transparent; border:1px solid var(--hairline); color:var(--cast-dim);
+  }
+  .btn.secondary:hover{border-color:var(--cast); color:var(--cast);}
+  .status-tag{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; padding:4px 8px; border-radius:6px;
+  }
+  .status-tag.ok{color:var(--green); border:1px solid var(--green);}
+  .status-tag.empty{color:var(--cast-dim); border:1px solid var(--hairline);}
+
+  /* ---- Section labels ---- */
+  .sec-label{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.1em;
+    color:var(--amber); text-transform:uppercase; margin:34px 0 12px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .sec-label::after{content:''; flex:1; height:1px; background:var(--hairline);}
+
+  /* ---- Gauge readout ---- */
+  .readout-row{display:grid; grid-template-columns:repeat(2, 1fr); gap:16px;}
+  .readout{
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
+    border-radius:var(--radius); box-shadow:var(--card-shadow);
+    padding:24px 26px; position:relative; overflow:hidden;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .readout::before{
+    content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+    background:linear-gradient(135deg, rgba(255,255,255,0.08), transparent 40%);
+  }
+  .readout:hover{transform:translateY(-2px); box-shadow:var(--card-shadow-hover);}
+  .readout .pole-tag{
+    position:absolute; top:14px; right:16px;
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--cast-dim);
+    letter-spacing:.06em;
+  }
+  .readout .avg{
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:44px; color:var(--amber);
+    line-height:1; letter-spacing:.01em;
+  }
+  .readout .avg small{font-size:16px; color:var(--cast-dim); font-weight:400;}
+  .readout .avg-label{
+    font-family:'Inter',sans-serif; font-size:12.5px; color:var(--cast-dim); margin-top:6px;
+  }
+
+  /* ---- KPI ticket grid ---- */
+  .ticket-grid{
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:16px;
+  }
+  .ticket{
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
+    border-radius:var(--radius); box-shadow:var(--card-shadow);
+    padding:20px 20px 18px; position:relative;
+    transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .ticket::before{
+    content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+    background:linear-gradient(135deg, rgba(255,255,255,0.07), transparent 40%);
+  }
+  .ticket:hover{
+    transform:translateY(-2px); box-shadow:var(--card-shadow-hover);
+    border-color:rgba(255,255,255,0.18);
+  }
+  .ticket .num{
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:26px; color:var(--cast);
+  }
+  .ticket .num.warn{color:var(--rust);}
+  .ticket .lbl{
+    font-size:11.5px; color:var(--cast-dim); margin-top:6px; line-height:1.4;
+  }
+  .ticket .sub{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--cast-dim);
+    margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06);
+  }
+
+  @media (max-width:760px){
+    .ticket-grid{grid-template-columns:repeat(2,1fr);}
+    .readout-row{grid-template-columns:1fr;}
+  }
+
+  /* ---- Chart panel ---- */
+  .chart-panel{
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
+    border-radius:var(--radius); box-shadow:var(--card-shadow);
+    padding:22px; margin-top:2px;
+  }
+  .chart-panel canvas{max-height:260px;}
+  .chart-toggle{display:flex; gap:8px; margin-bottom:14px;}
+  .chart-toggle button{
+    background:transparent; border:1px solid var(--hairline); color:var(--cast-dim);
+    font-family:'IBM Plex Mono', monospace; font-size:11px; padding:5px 12px; border-radius:2px;
+    cursor:pointer;
+  }
+  .chart-toggle button.active{border-color:var(--amber); color:var(--amber);}
+
+  /* ---- Table ---- */
+  table{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono', monospace; font-size:12px;}
+  thead th{
+    text-align:right; padding:9px 10px; color:var(--cast-dim); font-weight:500;
+    border-bottom:1px solid var(--hairline); text-transform:uppercase; font-size:10px; letter-spacing:.05em;
+  }
+  thead th:first-child, tbody td:first-child{text-align:left;}
+  tbody td{padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.04); text-align:right; color:var(--cast);}
+  tbody tr:hover{background:var(--panel-raised);}
+  .flag{color:var(--rust);}
+  .table-wrap{
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
+    border-radius:var(--radius); box-shadow:var(--card-shadow);
+    padding:6px 14px; overflow-x:auto; max-height:420px; overflow-y:auto;
+  }
+
+  .empty-state{
+    text-align:center; padding:60px 20px; color:var(--cast-dim);
+    font-family:'IBM Plex Mono', monospace; font-size:13px; line-height:1.8;
+  }
+  .empty-state b{color:var(--cast);}
+
+  footer{
+    margin-top:40px; padding-top:16px; border-top:1px solid var(--hairline);
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--cast-dim);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow">Batch record · Master sheet extract</div>
+      <h1>Spun Pole Weight Dashboard</h1>
+    </div>
+    <div class="plant-meta">
+      Source columns: <span>Date · SN · 6m PW · 8.3m PW · 6m OW · 8.3m OW</span><br>
+      Generated <span id="gen-date"></span>
+    </div>
+  </header>
+
+  <div class="load-panel">
+    <div class="field">
+      <label>Month</label>
+      <select id="sheetTab" style="width:160px; font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--graphite); border:1px solid var(--hairline); color:var(--cast); padding:7px 9px; border-radius:var(--radius);"></select>
+    </div>
+    <div class="field">
+      <label>6m standard wt (kg)</label>
+      <input type="number" id="std6m" value="160">
+    </div>
+    <div class="field">
+      <label>8.3m standard wt (kg)</label>
+      <input type="number" id="std83m" value="270">
+    </div>
+    <div class="field">
+      <label>Cement per 1000kg concrete</label>
+      <input type="number" id="cementFactor" value="218.82">
+    </div>
+    <div class="field">
+      <label>Zenn Factory concrete usage (kg)</label>
+      <input type="number" id="zennUsage" value="0">
+    </div>
+    <button class="btn" id="loadSheetBtn">Load from Master Sheet</button>
+    <button class="btn secondary" id="testLinkBtn" type="button">Test link in new tab</button>
+    <span class="status-tag empty" id="statusTag">Not connected</span>
+  </div>
+  <div id="loadError" style="display:none; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--rust); margin:-10px 0 20px; line-height:1.6;"></div>
+
+  <div id="content">
+    <div class="empty-state">
+      Waiting on data.<br>
+      Confirm the <b>Tab name</b> above matches your sheet's tab exactly, then click <b>Load from Master Sheet</b>. The spreadsheet must be shared as "Anyone with the link — Viewer" for this to work.</div>
+    <div class="empty-state" style="padding-top:0;">Not seeing data after clicking Test link? Tell me what appeared in that tab — a sign-in prompt, a blank page, or raw CSV text — and I'll pin down the fix.</div>
+
+  </div>
+
+  <footer>
+    <span>All calculations run locally in your browser — nothing is uploaded.</span>
+    <span id="rowCount"></span>
+  </footer>
+</div>
+
+<script>
+document.getElementById('gen-date').textContent = new Date().toLocaleString();
+
+// ---------- Configure your Master Sheet ID here ----------
+const MASTER_SHEET_ID = '1H67KpZfZxrX9pPWpYQRqRSXvLdv5kXuj9L5-8EpQYrs';
+
+// Build month dropdown: 24 months back to 3 months forward from today,
+// matching your tab naming convention e.g. "July 2026"
+const monthSelect = document.getElementById('sheetTab');
+(function populateMonths(){
+  const now = new Date();
+  const months = [];
+  for(let offset = -24; offset <= 3; offset++){
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    months.push(d.toLocaleString('en-US', {month:'long', year:'numeric'}));
+  }
+  months.reverse(); // most recent first
+  const currentLabel = now.toLocaleString('en-US', {month:'long', year:'numeric'});
+  months.forEach(label=>{
+    const opt = document.createElement('option');
+    opt.value = label;
+    opt.textContent = label;
+    if(label === currentLabel) opt.selected = true;
+    monthSelect.appendChild(opt);
+  });
+})();
+
+let trendChart = null;
+let concreteChart = null;
+let rawRows = [];
+
+const statusTag = document.getElementById('statusTag');
+const loadBtn = document.getElementById('loadSheetBtn');
+const errBox = document.getElementById('loadError');
+
+loadBtn.addEventListener('click', loadFromSheet);
+monthSelect.addEventListener('change', loadFromSheet); // auto-load when month changes
+document.getElementById('testLinkBtn').addEventListener('click', ()=>{
+  const tab = document.getElementById('sheetTab').value.trim();
+  const url = buildUrl(tab);
+  window.open(url, '_blank');
+});
+document.getElementById('std6m').addEventListener('change', recompute);
+document.getElementById('std83m').addEventListener('change', recompute);
+document.getElementById('cementFactor').addEventListener('change', recompute);
+document.getElementById('zennUsage').addEventListener('change', recompute);
+
+function buildUrl(tab){
+  return 'https://docs.google.com/spreadsheets/d/' + MASTER_SHEET_ID + '/gviz/tq?tqx=out:csv' +
+         (tab ? '&sheet=' + encodeURIComponent(tab) : '');
+}
+
+async function loadFromSheet(){
+  const tab = document.getElementById('sheetTab').value.trim();
+  errBox.style.display = 'none';
+
+  statusTag.textContent = 'Loading…'; statusTag.className = 'status-tag empty';
+  loadBtn.disabled = true;
+
+  const url = buildUrl(tab);
+  const isFileProtocol = window.location.protocol === 'file:';
+
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    if(text.trim().startsWith('<')){
+      throw new Error('SHARING');
+    }
+    parseCsv(text);
+  } catch(err){
+    statusTag.textContent = 'Failed'; statusTag.className = 'status-tag empty';
+    if(err.message === 'SHARING'){
+      showError('The sheet responded but returned a sign-in page, not data. Open the sheet → Share → General access → set to "Anyone with the link – Viewer," then try again.');
+    } else if(isFileProtocol){
+      showError('Browsers block this fetch when the dashboard is opened as a local file (file://). Click "Test link in new tab" — if that shows CSV data, the sheet itself is fine; you just need to host this HTML file somewhere (e.g. GitHub Pages, a simple local web server, or upload it to your site) rather than double-clicking it.');
+    } else {
+      showError('Request failed (' + err.message + '). Click "Test link in new tab" to check whether the sheet loads directly — if it prompts a sign-in, fix sharing; if it works there but not here, this may be a network/firewall block on docs.google.com.');
+    }
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+function showError(msg){
+  errBox.textContent = '⚠ ' + msg;
+  errBox.style.display = 'block';
+}
+
+function parseCsv(text){
+  const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+
+  rawRows = parsed.data.map(r=>{
+    const keys = Object.keys(r);
+    return {
+      date: (r[keys[0]]||'').trim(),
+      sn: (r[keys[1]]||'').trim(),
+      pw6: toNum(r[keys[2]]),
+      pw83: toNum(r[keys[3]]),
+      ow6: toNum(r[keys[4]]),
+      ow83: toNum(r[keys[5]])
+    };
+  }).filter(r=>r.date && r.sn);
+
+  statusTag.textContent = rawRows.length + ' rows loaded';
+  statusTag.className = 'status-tag ok';
+  document.getElementById('rowCount').textContent = rawRows.length + ' rows · ' + new Set(rawRows.map(r=>r.date)).size + ' dates';
+  recompute();
+}
+
+function toNum(v){
+  if(v===undefined || v===null) return null;
+  const s = String(v).trim();
+  if(s==='' || s==='-') return null;
+  const n = parseFloat(s.replace(/,/g,''));
+  return isNaN(n) ? null : n;
+}
+
+function aggregate(rows, std6, std83){
+  const byDate = {};
+  rows.forEach(r=>{
+    if(!byDate[r.date]) byDate[r.date] = blank();
+    accumulate(byDate[r.date], r);
+  });
+  const total = blank();
+  rows.forEach(r=>accumulate(total, r));
+
+  function blank(){
+    return {count6:0, wt6:0, count83:0, wt83:0, ow6count:0, ow6wt:0, ow83count:0, ow83wt:0};
+  }
+  function accumulate(bucket, r){
+    if(r.pw6!==null){ bucket.count6++; bucket.wt6+=r.pw6; }
+    if(r.pw83!==null){ bucket.count83++; bucket.wt83+=r.pw83; }
+    if(r.ow6!==null){ bucket.ow6count++; bucket.ow6wt+=r.ow6; }
+    if(r.ow83!==null){ bucket.ow83count++; bucket.ow83wt+=r.ow83; }
+  }
+  function derive(b){
+    const avg6 = b.count6 ? b.wt6/b.count6 : 0;
+    const avg83 = b.count83 ? b.wt83/b.count83 : 0;
+    const netWaste6 = b.wt6 - b.count6*std6;
+    const netWaste83 = b.wt83 - b.count83*std83;
+    const overWaste6 = b.ow6wt - b.ow6count*std6;
+    const overWaste83 = b.ow83wt - b.ow83count*std83;
+    return {...b, avg6, avg83, netWaste6, netWaste83, overWaste6, overWaste83};
+  }
+
+  const dailyDerived = {};
+  Object.keys(byDate).forEach(d=> dailyDerived[d] = derive(byDate[d]));
+
+  return {daily: dailyDerived, total: derive(total)};
+}
+
+function concreteCementReconciliation(totalDerived, cementFactor, zennUsage){
+  const concreteWastageOverweight = totalDerived.overWaste6 + totalDerived.overWaste83;
+  const cementWastageOverweight = concreteWastageOverweight * cementFactor/1000;
+
+  const concreteRequirement = totalDerived.wt6 - totalDerived.netWaste6 + (totalDerived.wt83 - totalDerived.netWaste83);
+  // wt - netWaste = count*standard, i.e. theoretical requirement at standard weight
+  const cementRequirement = concreteRequirement * cementFactor/1000;
+
+  const cementUsage = zennUsage * cementFactor/1000;
+  const cementWastageZenn = cementUsage - cementRequirement;
+
+  return {concreteWastageOverweight, cementWastageOverweight, concreteRequirement, cementRequirement, cementUsage, cementWastageZenn};
+}
+
+function recompute(){
+  if(rawRows.length===0) return;
+  const std6 = parseFloat(document.getElementById('std6m').value) || 0;
+  const std83 = parseFloat(document.getElementById('std83m').value) || 0;
+  const cementFactor = parseFloat(document.getElementById('cementFactor').value) || 0;
+  const zennUsage = parseFloat(document.getElementById('zennUsage').value) || 0;
+  const agg = aggregate(rawRows, std6, std83);
+  const cc = concreteCementReconciliation(agg.total, cementFactor, zennUsage);
+  render(agg, cc, cementFactor, zennUsage);
+}
+
+function fmt(n, d=0){
+  if(n===undefined || n===null || isNaN(n)) return '—';
+  return n.toLocaleString('en-IN', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+
+function render(agg, cc, cementFactor, zennUsage){
+  const t = agg.total;
+  const dates = Object.keys(agg.daily).sort((a,b)=> new Date(a) - new Date(b));
+
+  const html = `
+    <div class="sec-label">Average pole weight</div>
+    <div class="readout-row">
+      <div class="readout">
+        <span class="pole-tag">6M POLE</span>
+        <div class="avg">${fmt(t.avg6,2)}<small> kg</small></div>
+        <div class="avg-label">across ${t.count6} poles logged</div>
+      </div>
+      <div class="readout">
+        <span class="pole-tag">8.3M POLE</span>
+        <div class="avg">${fmt(t.avg83,2)}<small> kg</small></div>
+        <div class="avg-label">across ${t.count83} poles logged</div>
+      </div>
+    </div>
+
+    <div class="sec-label">Production totals</div>
+    <div class="ticket-grid">
+      <div class="ticket"><div class="num">${fmt(t.count6)}</div><div class="lbl">Total 6m poles</div><div class="sub">${fmt(t.wt6)} kg total</div></div>
+      <div class="ticket"><div class="num">${fmt(t.count83)}</div><div class="lbl">Total 8.3m poles</div><div class="sub">${fmt(t.wt83)} kg total</div></div>
+      <div class="ticket"><div class="num warn">${fmt(t.ow6count)}</div><div class="lbl">6m overweight poles</div><div class="sub">${fmt(t.ow6wt)} kg total</div></div>
+      <div class="ticket"><div class="num warn">${fmt(t.ow83count)}</div><div class="lbl">8.3m overweight poles</div><div class="sub">${fmt(t.ow83wt)} kg total</div></div>
+      <div class="ticket"><div class="num">${fmt(t.netWaste6)}</div><div class="lbl">Net wastage — 6m (kg)</div><div class="sub">vs ${document.getElementById('std6m').value} kg standard</div></div>
+      <div class="ticket"><div class="num">${fmt(t.netWaste83)}</div><div class="lbl">Net wastage — 8.3m (kg)</div><div class="sub">vs ${document.getElementById('std83m').value} kg standard</div></div>
+      <div class="ticket"><div class="num warn">${fmt(t.overWaste6)}</div><div class="lbl">Wastage from overweight — 6m</div><div class="sub">extra kg vs standard</div></div>
+      <div class="ticket"><div class="num warn">${fmt(t.overWaste83)}</div><div class="lbl">Wastage from overweight — 8.3m</div><div class="sub">extra kg vs standard</div></div>
+    </div>
+
+    <div class="sec-label">Concrete &amp; cement reconciliation</div>
+    <div class="ticket-grid">
+      <div class="ticket"><div class="num warn">${fmt(cc.concreteWastageOverweight)}</div><div class="lbl">Concrete wastage from overweight poles (kg)</div><div class="sub">sum of overweight extra kg</div></div>
+      <div class="ticket"><div class="num warn">${fmt(cc.cementWastageOverweight,2)}</div><div class="lbl">Cement wastage from overweight poles (kg)</div><div class="sub">× ${cementFactor}/1000 factor</div></div>
+      <div class="ticket"><div class="num">${fmt(cc.concreteRequirement)}</div><div class="lbl">Concrete requirement to date (kg)</div><div class="sub">theoretical, at standard weight</div></div>
+      <div class="ticket"><div class="num">${fmt(cc.cementRequirement,2)}</div><div class="lbl">Cement requirement to date (kg)</div><div class="sub">theoretical, at standard weight</div></div>
+      <div class="ticket"><div class="num">${fmt(zennUsage)}</div><div class="lbl">Zenn Factory concrete usage (kg)</div><div class="sub">manual entry, actual reported</div></div>
+      <div class="ticket"><div class="num">${fmt(cc.cementUsage,2)}</div><div class="lbl">Zenn Factory cement usage (kg)</div><div class="sub">derived from concrete usage</div></div>
+      <div class="ticket"><div class="num ${cc.cementWastageZenn>0?'warn':''}">${fmt(cc.cementWastageZenn,2)}</div><div class="lbl">Zenn Factory total cement wastage (kg)</div><div class="sub">usage − requirement</div></div>
+    </div>
+
+    <div class="sec-label">Trend</div>
+    <div class="chart-panel">
+      <div class="chart-toggle">
+        <button data-metric="count" class="active">Pole count</button>
+        <button data-metric="weight">Total weight</button>
+        <button data-metric="overweight">Overweight count</button>
+      </div>
+      <canvas id="trendCanvas"></canvas>
+    </div>
+
+    <div class="sec-label">Concrete requirement vs usage</div>
+    <div class="chart-panel">
+      <canvas id="concreteCanvas"></canvas>
+    </div>
+
+    <div class="sec-label">Daily breakdown</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>6m Poles</th><th>6m Wt (kg)</th><th>8.3m Poles</th><th>8.3m Wt (kg)</th>
+            <th>6m OW</th><th>8.3m OW</th><th>Net waste 6m</th><th>Net waste 8.3m</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${dates.map(d=>{
+            const b = agg.daily[d];
+            return `<tr>
+              <td>${d}</td>
+              <td>${fmt(b.count6)}</td><td>${fmt(b.wt6)}</td>
+              <td>${fmt(b.count83)}</td><td>${fmt(b.wt83)}</td>
+              <td class="${b.ow6count?'flag':''}">${fmt(b.ow6count)}</td>
+              <td class="${b.ow83count?'flag':''}">${fmt(b.ow83count)}</td>
+              <td>${fmt(b.netWaste6)}</td><td>${fmt(b.netWaste83)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('content').innerHTML = html;
+
+  document.querySelectorAll('.chart-toggle button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.chart-toggle button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      drawChart(agg, dates, btn.dataset.metric);
+    });
+  });
+
+  drawChart(agg, dates, 'count');
+  drawConcreteChart(cc);
+}
+
+function drawConcreteChart(cc){
+  const ctx = document.getElementById('concreteCanvas');
+  if(!ctx) return;
+  if(concreteChart) concreteChart.destroy();
+
+  concreteChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels:['Concrete requirement', 'Zenn usage (actual)', 'Wastage from overweight', 'Total cement wastage'],
+      datasets:[{
+        data:[cc.concreteRequirement, document.getElementById('zennUsage').value*1, cc.concreteWastageOverweight, cc.cementWastageZenn],
+        backgroundColor:['#8a8f8c','#f2b705','#d94f30','#d94f30'],
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b96ad', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'#2a3550'}},
+        y:{ticks:{color:'#e9edf5', font:{family:'IBM Plex Mono', size:11}}, grid:{display:false}}
+      }
+    }
+  });
+}
+
+function drawChart(agg, dates, metric){
+  const ctx = document.getElementById('trendCanvas');
+  if(trendChart) trendChart.destroy();
+
+  let ds6, ds83, label;
+  if(metric==='count'){
+    ds6 = dates.map(d=>agg.daily[d].count6);
+    ds83 = dates.map(d=>agg.daily[d].count83);
+    label = 'poles';
+  } else if(metric==='weight'){
+    ds6 = dates.map(d=>agg.daily[d].wt6);
+    ds83 = dates.map(d=>agg.daily[d].wt83);
+    label = 'kg';
+  } else {
+    ds6 = dates.map(d=>agg.daily[d].ow6count);
+    ds83 = dates.map(d=>agg.daily[d].ow83count);
+    label = 'overweight poles';
+  }
+
+  trendChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: dates,
+      datasets:[
+        {label:'6m', data:ds6, backgroundColor:'#f2b705'},
+        {label:'8.3m', data:ds83, backgroundColor:'#8a8f8c'}
+      ]
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{labels:{color:'#e9edf5', font:{family:'IBM Plex Mono', size:11}}},
+        tooltip:{titleFont:{family:'IBM Plex Mono'}, bodyFont:{family:'IBM Plex Mono'}}
+      },
+      scales:{
+        x:{ticks:{color:'#8b96ad', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'#2a3550'}},
+        y:{ticks:{color:'#8b96ad', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'#2a3550'}, title:{display:true, text:label, color:'#8b96ad'}}
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
